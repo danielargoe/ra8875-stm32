@@ -130,8 +130,11 @@ int main(void)
 
   // draw a simple line
   ra8875_draw_line(0, 0, 799, 479, 0x8FF1);
-  ra8875_draw_line(0, 0, 789, 479, 0xC89F);
-  ra8875_draw_line(0, 0, 799, 469, 0x8B71);
+  ra8875_draw_line(799, 0, 0, 479, 0xC89F);
+  ra8875_draw_line(399, 0, 399, 479, 0x8B71);
+  ra8875_draw_line(0, 239, 799, 239, 0x38D3);
+  ra8875_draw_triangle(200, 200, 260, 260, 320, 200, 0xFFFF, 0);
+  ra8875_draw_triangle(200, 0, 260, 60, 320, 0, 0xFFFF, 1);
 
   /* USER CODE END 2 */
 

@@ -25,8 +25,8 @@ cmake_install.cmake
 **/.settings/
 **/*.launch
 
-# .project
-# .cproject
+/.project
+/.cproject
 
 .idea/
 *.iml

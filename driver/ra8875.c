@@ -116,52 +116,102 @@ void ra8875_read(uint8_t reg, uint8_t* data) {
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
 }
 
+void ra8875_set_color(uint16_t color) {
+
+	// red, green, and blue (RGB565)
+	ra8875_write(0x63, (color >> 11) & 0x1F);
+	ra8875_write(0x64, (color >> 5) & 0x3F);
+	ra8875_write(0x65, color & 0x1F);
+}
+
 void ra8875_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
 
 	// start point and end point cannot be equal
 	if (x0 == x1 && y0 == y1) return;
 
-	// set the start point of a line
+	// set start point
 	ra8875_write(0x91, x0 & 0xFF);
 	ra8875_write(0x92, (x0 >> 8) & 0xFF);
 	ra8875_write(0x93, y0 & 0xFF);
 	ra8875_write(0x94, (y0 >> 8) & 0xFF);
 
-	// set the end point of a line
+	// set end point
 	ra8875_write(0x95, x1 & 0xFF);
 	ra8875_write(0x96, (x1 >> 8) & 0xFF);
 	ra8875_write(0x97, y1 & 0xFF);
 	ra8875_write(0x98, (y1 >> 8) & 0xFF);
 
-	// set the color of a line (red, green, blue)
-	ra8875_write(0x63, (color >> 11) & 0x1F);
-	ra8875_write(0x64, (color >> 5) & 0x3F);
-	ra8875_write(0x65, color & 0x1F);
+	// set color (red, green, blue)
+	ra8875_set_color(color);
 
-	// set draw a line and start the drawing function
-	ra8875_write(0x90, 0x08);
-	ra8875_write(0x90, 0x80);
+	// set draw a line and start drawing line
+	uint8_t data = 0x00;
+	data |= 0x00;
+	data |= 0x80;
+	ra8875_write(0x90, data);
 
 	// TODO: REFACTOR
 	// infinite loop until drawing process is complete
 	for (;;) {
 
-		// read data to see if drawing is complete
-		uint8_t data;
-		ra8875_read(0x90, &data);
+		// read from register to see if function is complete
+		uint8_t val;
 
-		// turn on lights on dev board to indicate that the drawing process is processing
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
-
-		// determine if drawing function is complete
-		if ((data & 0x80) == 0) break;
+		ra8875_read(0x90, &val);
+		if ((val & 0x80) == 0) break;
 	}
-
-	// turn off lights on dev board to indicate that the drawing process is complete
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
-
 }
+
+
+void ra8875_draw_triangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color, uint8_t fill) {
+
+	// start point, middle point, and end point cannot be equal
+	if ((x0 == x1 && y0 == y1) || (x1 == x2 && y1 == y2) || (x2 == x0 && y2 == y0)) return;
+
+	// set start point
+	ra8875_write(0x91, x0 & 0xFF);
+	ra8875_write(0x92, (x0 >> 8) & 0xFF);
+	ra8875_write(0x93, y0 & 0xFF);
+	ra8875_write(0x94, (y0 >> 8) & 0xFF);
+
+	// set middle point
+	ra8875_write(0x95, x1 & 0xFF);
+	ra8875_write(0x96, (x1 >> 8) & 0xFF);
+	ra8875_write(0x97, y1 & 0xFF);
+	ra8875_write(0x98, (y1 >> 8) & 0xFF);
+
+	// set end point
+	ra8875_write(0xA9, x2 & 0xFF);
+	ra8875_write(0xAA, (x2 >> 8) & 0xFF);
+	ra8875_write(0xAB, y2 & 0xFF);
+	ra8875_write(0xAC, (y2 >> 8) & 0xFF);
+
+	// set color
+	ra8875_set_color(color);
+
+	// set draw a triangle, set fill, and start drawing triangle
+	uint8_t data = 0x00;
+
+	if (fill) data |= 0x20;
+	data |= 0x01;
+	data |= 0x80;
+
+	ra8875_write(0x90, data);
+
+	// TODO: REFACTOR
+	// infinite loop until drawing process is complete
+	for (;;) {
+
+		// read from register to see if function is complete
+		uint8_t val;
+
+		ra8875_read(0x90, &val);
+		if ((val & 0x80) == 0) break;
+	}
+}
+
+void ra8875_draw_square(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color, uint8_t fill) {}
+void ra8875_draw_square_circle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {}
+void ra8875_draw_circle(uint16_t x0, uint16_t y0, uint8_t radius, uint16_t color, uint8_t fill) {}
+void ra8875_draw_ellipse(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {}
+void ra8875_draw_ellipse_curve(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t part, uint8_t fill) {}
