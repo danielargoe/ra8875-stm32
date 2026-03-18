@@ -1,0 +1,30 @@
+* text=auto
+
+*.c      text
+*.h      text
+*.cpp    text
+*.hpp    text
+*.ld     text
+*.txt    text
+*.md     text
+*.cmake  text
+CMakeLists.txt text
+
+*.sh     text eol=lf
+*.py     text eol=lf
+
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+.project   text
+.cproject  text
+*.ioc      text
+
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.pdf    binary
+*.bin    binary
+*.hex    binary
+*.elf    binary
