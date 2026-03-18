@@ -8,7 +8,7 @@
 #ifndef RA8875_H_
 #define RA8875_H_
 
-#include "main.h"
+#include "stdint.h"
 
 void ra8875_initialize();
 void ra8875_write(uint8_t reg, uint8_t data);

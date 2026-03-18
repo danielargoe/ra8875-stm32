@@ -5,7 +5,9 @@
  *      Author: danie
  */
 
+#include "ra8875_regs.h"
 #include "ra8875.h"
+#include "main.h"
 
 extern SPI_HandleTypeDef hspi1;
 

@@ -29,4 +29,21 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>Core/Inc/ra8875.h</name>
+			<type>1</type>
+			<location>C:/Users/danie/Documents/code/github/ra8875-stm32/driver/ra8875.h</location>
+		</link>
+		<link>
+			<name>Core/Inc/ra8875_regs.h</name>
+			<type>1</type>
+			<location>C:/Users/danie/Documents/code/github/ra8875-stm32/driver/ra8875_regs.h</location>
+		</link>
+		<link>
+			<name>Core/Src/ra8875.c</name>
+			<type>1</type>
+			<location>C:/Users/danie/Documents/code/github/ra8875-stm32/driver/ra8875.c</location>
+		</link>
+	</linkedResources>
 </projectDescription>
