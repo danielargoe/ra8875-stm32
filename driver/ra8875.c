@@ -83,37 +83,55 @@ void ra8875_initialize() {
 void ra8875_write(uint8_t reg, uint8_t data) {
 
 	// create a buffer to hold the register and data
-	uint8_t buf[2];
+	uint8_t tx[2];
 
-	buf[0] = 0x80;
-	buf[1] = reg;
+	tx[0] = 0x80;
+	tx[1] = reg;
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, buf, 2, HAL_MAX_DELAY);
+	HAL_SPI_Transmit(&hspi1, tx, 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
 
-	buf[0] = 0x00;
-	buf[1] = data;
+	tx[0] = 0x00;
+	tx[1] = data;
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, buf, 2, HAL_MAX_DELAY);
+	HAL_SPI_Transmit(&hspi1, tx, 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
 }
 
 void ra8875_read(uint8_t reg, uint8_t* data) {
 
 	// create a buffer to hold the register and data
-	uint8_t buf[2];
+	uint8_t tx[2];
+	uint8_t rx[2];
 
-	buf[0] = 0x80;
-	buf[1] = reg;
+	tx[0] = 0x80;
+	tx[1] = reg;
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, buf, 2, HAL_MAX_DELAY);
+	HAL_SPI_Transmit(&hspi1, tx, 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
 
-	buf[0] = 0x40;
+	tx[0] = 0x40;
+	tx[1] = 0x00;
+	rx[0] = 0x00;
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, buf, 2, HAL_MAX_DELAY);
-	HAL_SPI_Receive(&hspi1, data, 1, HAL_MAX_DELAY);
+	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+	*data = rx[1];
+}
+
+uint8_t ra8875_wait_while_busy(uint8_t reg, uint8_t mask, uint32_t timeout_ms) {
+
+	// create start timestamp
+	uint32_t then = HAL_GetTick();
+
+	// iterate until data does not equal mask or timeout_ms condition is met
+	for (;;) {
+		uint8_t data;
+		ra8875_read(reg, &data);
+
+		if ((data & mask) == 0) return 1;
+		if (HAL_GetTick() - then >= timeout_ms) return 0;
+	}
 }
 
 void ra8875_set_color(uint16_t color) {
@@ -150,16 +168,8 @@ void ra8875_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16
 	data |= 0x80;
 	ra8875_write(0x90, data);
 
-	// TODO: REFACTOR
-	// infinite loop until drawing process is complete
-	for (;;) {
-
-		// read from register to see if function is complete
-		uint8_t val;
-
-		ra8875_read(0x90, &val);
-		if ((val & 0x80) == 0) break;
-	}
+	// wait for drawing to finish
+	if (!ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
 }
 
 
@@ -189,29 +199,172 @@ void ra8875_draw_triangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, ui
 	// set color
 	ra8875_set_color(color);
 
-	// set draw a triangle, set fill, and start drawing triangle
+	// set draw a triangle, fill, and start drawing triangle
 	uint8_t data = 0x00;
 
 	if (fill) data |= 0x20;
 	data |= 0x01;
 	data |= 0x80;
-
 	ra8875_write(0x90, data);
 
-	// TODO: REFACTOR
-	// infinite loop until drawing process is complete
-	for (;;) {
-
-		// read from register to see if function is complete
-		uint8_t val;
-
-		ra8875_read(0x90, &val);
-		if ((val & 0x80) == 0) break;
-	}
+	// wait for drawing to finish
+	if (!ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
 }
 
-void ra8875_draw_square(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color, uint8_t fill) {}
-void ra8875_draw_square_circle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {}
-void ra8875_draw_circle(uint16_t x0, uint16_t y0, uint8_t radius, uint16_t color, uint8_t fill) {}
-void ra8875_draw_ellipse(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {}
-void ra8875_draw_ellipse_curve(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t part, uint8_t fill) {}
+void ra8875_draw_square(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color, uint8_t fill) {
+
+	// start point and end point cannot be equal
+	if (x0 == x1 && y0 == y1) return;
+
+	// set start point
+	ra8875_write(0x91, x0 & 0xFF);
+	ra8875_write(0x92, (x0 >> 8) & 0xFF);
+	ra8875_write(0x93, y0 & 0xFF);
+	ra8875_write(0x94, (y0 >> 8) & 0xFF);
+
+	// set end point
+	ra8875_write(0x95, x1 & 0xFF);
+	ra8875_write(0x96, (x1 >> 8) & 0xFF);
+	ra8875_write(0x97, y1 & 0xFF);
+	ra8875_write(0x98, (y1 >> 8) & 0xFF);
+
+	// set color
+	ra8875_set_color(color);
+
+	// set draw a square, fill, and start drawing square
+	uint8_t data = 0x00;
+
+	if (fill) data |= 0x20;
+	data |= 0x10 | 0x00;
+	data |= 0x80;
+	ra8875_write(0x90, data);
+
+	// wait for drawing to finish
+	if (!ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+}
+void ra8875_draw_square_circle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {
+
+	// start point and end point cannot be equal
+	if (x0 == x1 && y0 == y1) return;
+
+	// set start
+	ra8875_write(0x91, x0 & 0xFF);
+	ra8875_write(0x92, (x0 >> 8) & 0xFF);
+	ra8875_write(0x93, y0 & 0xFF);
+	ra8875_write(0x94, (y0 >> 8) & 0xFF);
+
+	// set end
+	ra8875_write(0x95, x1 & 0xFF);
+	ra8875_write(0x96, (x1 >> 8) & 0xFF);
+	ra8875_write(0x97, y1 & 0xFF);
+	ra8875_write(0x98, (y1 >> 8) & 0xFF);
+
+	// set long axis
+	ra8875_write(0xA1, a_l & 0xFF);
+	ra8875_write(0xA2, (a_l >> 8) & 0xFF);
+
+	// set short axis
+	ra8875_write(0xA3, a_s & 0xFF);
+	ra8875_write(0xA4, (a_s >> 8) & 0xFF);
+
+	// set color
+	ra8875_set_color(color);
+
+	// set draw a circle square, fill, and start drawing circle square
+	uint8_t data = 0x00;
+
+	if (fill) data |= 0x40;
+	data |= 0x20;
+	data |= 0x80;
+	ra8875_write(0xA0, data);
+
+	// wait for drawing to finish
+	ra8875_wait_while_busy(0xA0, 0x80, 50);
+}
+
+void ra8875_draw_circle(uint16_t x0, uint16_t y0, uint8_t radius, uint16_t color, uint8_t fill) {
+
+	// set center
+	ra8875_write(0x99, x0 & 0xFF);
+	ra8875_write(0x9A, (x0 >> 8) & 0xFF);
+	ra8875_write(0x9B, y0 & 0xFF);
+	ra8875_write(0x9C, (y0 >> 8) & 0xFF);
+
+	// set radius
+	ra8875_write(0x9D, radius);
+
+	// set color
+	ra8875_set_color(color);
+
+	// set fill and start drawing circle
+	uint8_t data = 0x00;
+
+	if (fill) data |= 0x20;
+	data |= 0x40;
+	ra8875_write(0x90, data);
+
+	// wait for drawing to finish
+	ra8875_wait_while_busy(0x90, 0x40, 50);
+}
+
+void ra8875_draw_ellipse(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {
+
+	// set center
+	ra8875_write(0xA5, x0 & 0xFF);
+	ra8875_write(0xA6, (x0 >> 8) & 0xFF);
+	ra8875_write(0xA7, y0 & 0xFF);
+	ra8875_write(0xA8, (y0 >> 8) & 0xFF);
+
+	// set long axis
+	ra8875_write(0xA5, a_l & 0xFF);
+	ra8875_write(0xA5, (a_l >> 8) & 0xFF);
+
+	// set short axis
+	ra8875_write(0xA5, a_s & 0xFF);
+	ra8875_write(0xA5, (a_s >> 8) & 0xFF);
+
+	// set color
+	ra8875_set_color(color);
+
+	// set draw ellipse, fill, and start drawing ellipse
+	uint8_t data = 0x00;
+
+	if (fill) data |= 0x40;
+	data |= 0x00 | 0x00;
+	data |= 0x80;
+	ra8875_write(0xA0, data);
+
+	// wait for drawing to finish
+	ra8875_wait_while_busy(0xA0, 0x80, 50);
+}
+void ra8875_draw_ellipse_curve(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill, uint8_t part) {
+
+	// set center
+	ra8875_write(0xA5, x0 & 0xFF);
+	ra8875_write(0xA6, (x0 >> 8) & 0xFF);
+	ra8875_write(0xA7, y0 & 0xFF);
+	ra8875_write(0xA8, (y0 >> 8) & 0xFF);
+
+	// set long axis
+	ra8875_write(0xA1, a_l & 0xFF);
+	ra8875_write(0xA2, (a_l >> 8) & 0xFF);
+
+	// set short axis
+	ra8875_write(0xA3, a_s & 0xFF);
+	ra8875_write(0xA4, (a_s >> 8) & 0xFF);
+
+	// set color
+	ra8875_set_color(color);
+
+	// set draw curve, draw curve part select (DECP), fill, and start drawing curve
+	uint8_t data = 0x00;
+
+	if (fill) data |= 0x40;
+	data |= 0x00 | 0x10;
+	data |= 0x80;
+	data |= part;
+	ra8875_write(0xA0, data);
+
+	// wait for drawing to finish
+	ra8875_wait_while_busy(0xA0, 0x80, 50);
+}
