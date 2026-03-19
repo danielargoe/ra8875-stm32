@@ -128,14 +128,28 @@ int main(void)
   /* USER CODE BEGIN 2 */
   ra8875_initialize();
 
-  // draw a simple line
-  ra8875_draw_line(0, 0, 799, 479, 0x8FF1);
-  ra8875_draw_line(799, 0, 0, 479, 0xC89F);
-  ra8875_draw_line(399, 0, 399, 479, 0x8B71);
-  ra8875_draw_line(0, 239, 799, 239, 0x38D3);
-  ra8875_draw_triangle(200, 200, 260, 260, 320, 200, 0xFFFF, 0);
-  ra8875_draw_triangle(200, 0, 260, 60, 320, 0, 0xFFFF, 1);
+  // basic testing
+  ra8875_draw_line(20, 20, 200, 120, 0xFFFF);
 
+  ra8875_draw_triangle(240, 120, 320, 40, 400, 120, 0xF800, 0);
+  ra8875_draw_triangle(240, 220, 320, 140, 400, 220, 0x07E0, 1);
+
+  ra8875_draw_square(450, 40, 580, 120, 0x001F, 0);
+  ra8875_draw_square(620, 40, 760, 120, 0xFFE0, 1);
+
+  ra8875_draw_square_circle(450, 150, 580, 240, 20, 20, 0xF81F, 0);
+  ra8875_draw_square_circle(620, 150, 760, 240, 20, 20, 0x07FF, 1);
+
+  ra8875_draw_circle(90, 330, 40, 0xFFFF, 0);
+  ra8875_draw_circle(210, 330, 40, 0xFD20, 1);
+
+  ra8875_draw_ellipse(430, 340, 70, 35, 0xAFE5, 0);
+  ra8875_draw_ellipse(650, 340, 70, 35, 0x780F, 1);
+
+  ra8875_draw_ellipse_curve(330, 360, 45, 25, 0xF800, 0, 0);
+  ra8875_draw_ellipse_curve(390, 360, 45, 25, 0x07E0, 1, 1);
+  ra8875_draw_ellipse_curve(330, 430, 45, 25, 0x001F, 0, 2);
+  ra8875_draw_ellipse_curve(390, 430, 45, 25, 0xFFE0, 1, 3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
