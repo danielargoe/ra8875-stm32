@@ -8,6 +8,7 @@
 #include "ra8875_regs.h"
 #include "ra8875.h"
 #include "main.h"
+#include "string.h"
 
 extern SPI_HandleTypeDef hspi1;
 
@@ -98,7 +99,7 @@ void ra8875_write(uint8_t reg, uint8_t data) {
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
 }
 
-void ra8875_read(uint8_t reg, uint8_t* data) {
+uint8_t ra8875_read(uint8_t reg) {
 
 	// create a buffer to hold the register and data
 	uint8_t tx[2];
@@ -116,7 +117,22 @@ void ra8875_read(uint8_t reg, uint8_t* data) {
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
 	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-	*data = rx[1];
+	return rx[1];
+}
+
+uint8_t ra8875_read_status() {
+
+	// create a buffer to hold the command and data
+	uint8_t tx[2];
+	uint8_t rx[2];
+
+	tx[0] = 0xC0;
+	tx[1] = 0x00;
+	rx[0] = 0x00;
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+	return rx[1];
 }
 
 uint8_t ra8875_wait_while_busy(uint8_t reg, uint8_t mask, uint32_t timeout_ms) {
@@ -126,11 +142,24 @@ uint8_t ra8875_wait_while_busy(uint8_t reg, uint8_t mask, uint32_t timeout_ms) {
 
 	// iterate until data does not equal mask or timeout_ms condition is met
 	for (;;) {
-		uint8_t data;
-		ra8875_read(reg, &data);
+		uint8_t data = ra8875_read(reg);
 
-		if ((data & mask) == 0) return 1;
-		if (HAL_GetTick() - then >= timeout_ms) return 0;
+		if ((data & mask) == 0) return 0;
+		if (HAL_GetTick() - then >= timeout_ms) return 1;
+	}
+}
+
+uint8_t ra8875_wait_status_while_busy(uint8_t mask, uint32_t timeout_ms) {
+
+	// create start timestamp
+	uint32_t then = HAL_GetTick();
+
+	// iterate until data does not equal mask or timeout_ms condition is met
+	for (;;) {
+		uint8_t data = ra8875_read_status();
+
+		if ((data & mask) == 0) return 0;
+		if (HAL_GetTick() - then >= timeout_ms) return 1;
 	}
 }
 
@@ -169,7 +198,7 @@ void ra8875_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16
 	ra8875_write(0x90, data);
 
 	// wait for drawing to finish
-	if (!ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+	if (ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
 }
 
 
@@ -208,7 +237,7 @@ void ra8875_draw_triangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, ui
 	ra8875_write(0x90, data);
 
 	// wait for drawing to finish
-	if (!ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+	if (ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
 }
 
 void ra8875_draw_square(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color, uint8_t fill) {
@@ -240,7 +269,7 @@ void ra8875_draw_square(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint
 	ra8875_write(0x90, data);
 
 	// wait for drawing to finish
-	if (!ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+	if (ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
 }
 void ra8875_draw_square_circle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {
 
@@ -279,7 +308,7 @@ void ra8875_draw_square_circle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y
 	ra8875_write(0xA0, data);
 
 	// wait for drawing to finish
-	ra8875_wait_while_busy(0xA0, 0x80, 50);
+	if (ra8875_wait_while_busy(0xA0, 0x80, 50)) return; // do something here
 }
 
 void ra8875_draw_circle(uint16_t x0, uint16_t y0, uint8_t radius, uint16_t color, uint8_t fill) {
@@ -304,7 +333,7 @@ void ra8875_draw_circle(uint16_t x0, uint16_t y0, uint8_t radius, uint16_t color
 	ra8875_write(0x90, data);
 
 	// wait for drawing to finish
-	ra8875_wait_while_busy(0x90, 0x40, 50);
+	if (ra8875_wait_while_busy(0x90, 0x40, 50)) return; // do something here
 }
 
 void ra8875_draw_ellipse(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {
@@ -335,7 +364,7 @@ void ra8875_draw_ellipse(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, u
 	ra8875_write(0xA0, data);
 
 	// wait for drawing to finish
-	ra8875_wait_while_busy(0xA0, 0x80, 50);
+	if (ra8875_wait_while_busy(0xA0, 0x80, 50)) return; // do something here
 }
 void ra8875_draw_ellipse_curve(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill, uint8_t part) {
 
@@ -366,5 +395,55 @@ void ra8875_draw_ellipse_curve(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t 
 	ra8875_write(0xA0, data);
 
 	// wait for drawing to finish
-	ra8875_wait_while_busy(0xA0, 0x80, 50);
+	if (ra8875_wait_while_busy(0xA0, 0x80, 50)) return; // do something here
+}
+
+void ra8875_write_text(char* s, uint16_t x, uint16_t y, uint8_t size, uint16_t color) {
+
+	// break string apart
+	int increment = 0;
+
+	// set font size
+	switch (size) {
+		case 0:
+			ra8875_write(0x22, 0x00);
+			increment = 8;
+			break;
+		case 1:
+			ra8875_write(0x22, 0x05);
+			increment = 16;
+			break;
+		case 2:
+			ra8875_write(0x22, 0x0A);
+			increment = 24;
+			break;
+		case 3:
+			ra8875_write(0x22, 0x0F);
+			increment = 32;
+			break;
+		default:
+			break;
+	}
+
+	// set font color
+	ra8875_set_color(color);
+
+	// iterate from the starting x point to the end x point
+	for (int i = 0; s[i] != '\0'; i++) {
+
+		// set font cursor horizontal and vertical position
+		ra8875_write(0x2A, x & 0xFF);
+		ra8875_write(0x2B, (x >> 8) & 0xFF);
+		ra8875_write(0x2C, y & 0xFF);
+		ra8875_write(0x2D, (y >> 8) & 0xFF);
+
+		// write text (uint8_t)
+		ra8875_write(0x02, (uint8_t) s[i]);
+
+		// wait until writing is finished
+		ra8875_wait_status_while_busy(0x80, 50);
+
+		// increase starting x point by the increment value (size)
+		x += increment;
+	}
 }
