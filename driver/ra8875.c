@@ -1,449 +1,714 @@
 /*
- * ra8875.c
+ * ra8875_new.c
  *
- *  Created on: Mar 16, 2026
+ *  Created on: Mar 23, 2026
  *      Author: danie
  */
 
-#include "ra8875_regs.h"
+#include "stdbool.h"
+#include "stdint.h"
 #include "ra8875.h"
-#include "main.h"
-#include "string.h"
 
-extern SPI_HandleTypeDef hspi1;
+static ra8875_t ra8875_config;
 
-void ra8875_initialize() {
+// done
+static void ra8875_delay_ms(uint32_t delay);
+static void ra8875_write_scs_low(void);
+static void ra8875_write_scs_high(void);
 
-	// hardware reset
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-	HAL_Delay(10);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
-	HAL_Delay(10);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-	HAL_Delay(10);
+// done
+static void ra8875_write_data(uint8_t data);
+static void ra8875_read_data(uint8_t *data);
+static void ra8875_write_command(uint8_t reg);
+static void ra8875_read_status(uint8_t *status);
 
-	// initiate pll
-	ra8875_write(0x88, 0x0B);
-	HAL_Delay(1);
-	ra8875_write(0x89, 0x02);
-	HAL_Delay(1);
+// done
+static void ra8875_write_register(uint8_t reg, uint8_t data);
+static void ra8875_read_register(uint8_t reg, uint8_t *data);
+static void ra8875_read_status_register(uint8_t *data);
 
-	// color depth setting
-    ra8875_write(0x10, 0x08);
+// done
+static void ra8875_update_register_bits(uint8_t reg, uint8_t mask, uint8_t data);
 
-	// set pixel clock
-	ra8875_write(0x04, 0x81);
-	HAL_Delay(1);
+// done
+static void ra8875_init_phase_locked_loop(void);
+static void ra8875_init_system_configuration(void);
+static void ra8875_init_pixel_clock(void);
+static void ra8875_init_horizontal_settings(void);
+static void ra8875_init_vertical_settings(void);
+static void ra8875_init_pulse_width_modulation_1(void);
 
-	// horizontal settings (800px wide)
-	ra8875_write(0x14, 0x63);   // HDWR: (99+1)*8 = 800
-	ra8875_write(0x15, 0x00);   // HNDFTR
-	ra8875_write(0x16, 0x03);   // HNDR
-	ra8875_write(0x17, 0x01);   // HSTR
-	ra8875_write(0x18, 0x03);   // HPWR
+// current
+static void ra8875_write_memory_data(uint8_t data);
+//static void ra8875_read_memory_data(uint8_t *data);
 
-	// vertical settings (480px tall)
-	ra8875_write(0x19, 0xDF);   // VDHR0: lower byte of 479
-	ra8875_write(0x1A, 0x01);   // VDHR1: upper byte of 479
-	ra8875_write(0x1B, 0x0F);   // VNDR0
-	ra8875_write(0x1C, 0x00);   // VNDR1
-	ra8875_write(0x1D, 0x0E);   // VSTR0
-	ra8875_write(0x1E, 0x00);   // VSTR1
-	ra8875_write(0x1F, 0x01);   // VPWR
+static void ra8875_write_text_busy_wait(void);
+static void ra8875_clear_memory_busy_wait(void);
+static void ra8875_draw_shape_busy_wait(uint8_t reg, uint8_t mask);
 
-	// active window (HSAW, VSAW) - top left -> (HEAW, VEAW) - bottom right
-	ra8875_write(0x30, 0x00); 	// HSAW0
-	ra8875_write(0x31, 0x00);	// HSAW1
-	ra8875_write(0x32, 0x00);	// VSAW0
-	ra8875_write(0x33, 0x00);	// VSAW1
-	ra8875_write(0x34, 0x1F);	// HEAW0
-	ra8875_write(0x35, 0x03);	// HEAW1
-	ra8875_write(0x36, 0xDF);	// VEAW0
-	ra8875_write(0x37, 0x01);	// VEAW1
+// done
+static void ra8875_set_font_background_transparency(bool enable);
+static void ra8875_set_font_horizontal_enlargement(uint8_t enlargement);
+static void ra8875_set_font_vertical_enlargement(uint8_t enlargement);
+static void ra8875_set_font_cursor_horizontal_position(uint16_t position);
+static void ra8875_set_font_cursor_vertical_position(uint16_t position);
 
-	// enable TFT output / GPIOX
-//	ra8875_write(0xC7, 0x01);   // GPIOX on
+// done
+static void ra8875_set_color_background(uint16_t color);
+static void ra8875_set_color_foreground(uint16_t color);
 
-	// config for backlight (PWM1)
-	ra8875_write(0x8A, 0x8F);   // enable PWM1, choose a clock divisor
-	ra8875_write(0x8B, 0xFF);   // full duty cycle
+static void ra8875_draw_horizontal_position_start(uint16_t position);
+static void ra8875_draw_vertical_position_start(uint16_t position);
+static void ra8875_draw_horizontal_position_stop(uint16_t position);
+static void ra8875_draw_vertical_position_stop(uint16_t position);
+static void ra8875_draw_horizontal_position_middle(uint16_t position);
+static void ra8875_draw_vertical_position_middle(uint16_t position);
+static void ra8875_draw_horizontal_position_center_circle(uint16_t position);static void ra8875_draw_vertical_position_center_circle(uint16_t position);
+static void ra8875_draw_horizontal_position_center_ellipse(uint16_t position);
+static void ra8875_draw_vertical_position_center_ellipse(uint16_t position);
+static void ra8875_draw_radius(uint8_t radius);
+static void ra8875_draw_curve_part_select(uint8_t curve_part_select);
+static void ra8875_draw_axis_long(uint16_t axis);
+static void ra8875_draw_axis_short(uint16_t axis);
 
-	// display on
-	ra8875_write(0x01, 0x80);   // PWRR: display on, normal operation
-	HAL_Delay(1);
 
-	// backlight on
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+/** ---------- **/
 
-	// clear memory 8Eh
-	ra8875_write(0x8E, 0x80);
-	HAL_Delay(15);
-	ra8875_write(0x8E, 0x00);
+static void ra8875_delay_ms(uint32_t delay) {
+
+	// set a delay
+	HAL_Delay(delay);
+}
+static void ra8875_write_scs_low(void) {
+
+	// set spi chip select low
+	HAL_GPIO_WritePin(ra8875_config.scs_port, ra8875_config.scs_pin, GPIO_PIN_RESET);
+}
+static void ra8875_write_scs_high(void) {
+
+	// set spi chip select high
+	HAL_GPIO_WritePin(ra8875_config.scs_port, ra8875_config.scs_pin, GPIO_PIN_SET);
 }
 
-void ra8875_write(uint8_t reg, uint8_t data) {
+static void ra8875_write_data(uint8_t data) {
 
-	// create a buffer to hold the register and data
+	// write data to a register
 	uint8_t tx[2];
-
-	tx[0] = 0x80;
-	tx[1] = reg;
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, tx, 2, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-
 	tx[0] = 0x00;
 	tx[1] = data;
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, tx, 2, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+	ra8875_write_scs_low();
+	HAL_SPI_Transmit(ra8875_config.hspi, tx, 2, HAL_MAX_DELAY);
+	ra8875_write_scs_high();
 }
+static void ra8875_read_data(uint8_t *data) {
 
-uint8_t ra8875_read(uint8_t reg) {
-
-	// create a buffer to hold the register and data
+	// read data from a register
 	uint8_t tx[2];
 	uint8_t rx[2];
-
-	tx[0] = 0x80;
-	tx[1] = reg;
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, tx, 2, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-
 	tx[0] = 0x40;
 	tx[1] = 0x00;
 	rx[0] = 0x00;
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-	return rx[1];
+	rx[1] = 0x00;
+	ra8875_write_scs_low();
+	HAL_SPI_TransmitReceive(ra8875_config.hspi, tx, rx, 2, HAL_MAX_DELAY);
+	ra8875_write_scs_high();
+	*data = rx[1];
 }
+static void ra8875_write_command(uint8_t reg) {
 
-uint8_t ra8875_read_status() {
+	// write command to a register
+	uint8_t tx[2];
+	tx[0] = 0x80;
+	tx[1] = reg;
+	ra8875_write_scs_low();
+	HAL_SPI_Transmit(ra8875_config.hspi, tx, 2, HAL_MAX_DELAY);
+	ra8875_write_scs_high();
+}
+static void ra8875_read_status(uint8_t *status) {
 
-	// create a buffer to hold the command and data
+	// read status from a register
 	uint8_t tx[2];
 	uint8_t rx[2];
-
 	tx[0] = 0xC0;
 	tx[1] = 0x00;
 	rx[0] = 0x00;
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-	return rx[1];
+	rx[1] = 0x00;
+	ra8875_write_scs_low();
+	HAL_SPI_TransmitReceive(ra8875_config.hspi, tx, rx, 2, HAL_MAX_DELAY);
+	ra8875_write_scs_high();
+	*status = rx[1];
 }
 
-uint8_t ra8875_wait_while_busy(uint8_t reg, uint8_t mask, uint32_t timeout_ms) {
+static void ra8875_write_register(uint8_t reg, uint8_t data) {
 
-	// create start timestamp
-	uint32_t then = HAL_GetTick();
+	// write data to a register given the register and data
+	ra8875_write_command(reg);
+	ra8875_write_data(data);
+}
+static void ra8875_read_register(uint8_t reg, uint8_t *data) {
 
-	// iterate until data does not equal mask or timeout_ms condition is met
+	// read data to a memory address given the register
+	ra8875_write_command(reg);
+	ra8875_read_data(data);
+}
+static void ra8875_read_status_register(uint8_t *data) {
+
+	// read data to a memory address from the status register
+	ra8875_read_status(data);
+}
+
+static void ra8875_update_register_bits(uint8_t reg, uint8_t mask, uint8_t data) {
+
+	// read data from register and then update the value based on the mask and data
+	uint8_t current;
+	ra8875_read_register(reg, &current);
+
+	current = (current & ~mask) | (data & mask);
+	ra8875_write_register(reg, current);
+}
+
+static void ra8875_init_phase_locked_loop(void) {
+
+	// phased lock loop init
+	ra8875_write_register(0x88, ra8875_config.pllc1);
+	ra8875_delay_ms(1);
+	ra8875_write_register(0x89, ra8875_config.pllc2);
+	ra8875_delay_ms(1);
+}
+static void ra8875_init_system_configuration(void) {
+
+	// system configuration init (color depth and mcu interface)
+	ra8875_write_register(0x10, ra8875_config.sysr);
+}
+static void ra8875_init_pixel_clock(void) {
+
+	// pixel clock init
+	ra8875_write_register(0x04, ra8875_config.pcsr);
+	ra8875_delay_ms(1);
+}
+static void ra8875_init_horizontal_settings(void) {
+
+	// horizontal settings init
+	ra8875_write_register(0x14, ra8875_config.hdwr);
+	ra8875_write_register(0x15, ra8875_config.hndftr);
+	ra8875_write_register(0x16, ra8875_config.hndr);
+	ra8875_write_register(0x17, ra8875_config.hstr);
+	ra8875_write_register(0x18, ra8875_config.hpwr);
+}
+static void ra8875_init_vertical_settings(void) {
+
+	// vertical settings init
+	ra8875_write_register(0x19, ra8875_config.vdhr0);
+	ra8875_write_register(0x1A, ra8875_config.vdhr1);
+	ra8875_write_register(0x1B, ra8875_config.vndr0);
+	ra8875_write_register(0x1C, ra8875_config.vndr1);
+	ra8875_write_register(0x1D, ra8875_config.vstr0);
+	ra8875_write_register(0x1E, ra8875_config.vstr1);
+	ra8875_write_register(0x1F, ra8875_config.vpwr);
+}
+static void ra8875_init_pulse_width_modulation_1(void) {
+
+	// pulse width modulation 1 init
+	ra8875_write_register(0x8A, ra8875_config.p1cr);
+	ra8875_write_register(0x8B, ra8875_config.p1dcr);
+}
+
+static void ra8875_write_memory_data(uint8_t data) {
+
+	// write data to memory
+	ra8875_write_register(0x02, data);
+
+	// loop to check if memory is being written
+	ra8875_write_text_busy_wait();
+}
+//static void ra8875_read_memory_data(uint8_t *data) {
+//
+//	// read data from memory
+//	ra8875_read_register(0x02, data);
+//}
+
+static void ra8875_write_text_busy_wait(void) {
+
+	// loop to check if memory is being written (status register)
 	for (;;) {
-		uint8_t data = ra8875_read(reg);
+		uint8_t status;
+		ra8875_read_status_register(&status);
 
-		if ((data & mask) == 0) return 0;
-		if (HAL_GetTick() - then >= timeout_ms) return 1;
+		if ((status & 0x80) == 0u) break;
+	}
+}
+static void ra8875_clear_memory_busy_wait(void) {
+
+	// loop to check if memory is being cleared
+	for (;;) {
+		uint8_t status;
+		ra8875_read_register(0x8E, &status);
+
+		if ((status & 0x80) == 0u) break;
+	}
+}
+static void ra8875_draw_shape_busy_wait(uint8_t reg, uint8_t mask) {
+
+	// loop to check if memory is being cleared
+	for (;;) {
+		uint8_t status;
+		ra8875_read_register(reg, &status);
+
+		if ((status & mask) == 0u) break;
 	}
 }
 
-uint8_t ra8875_wait_status_while_busy(uint8_t mask, uint32_t timeout_ms) {
+static void ra8875_set_font_background_transparency(bool enable) {
 
-	// create start timestamp
-	uint32_t then = HAL_GetTick();
-
-	// iterate until data does not equal mask or timeout_ms condition is met
-	for (;;) {
-		uint8_t data = ra8875_read_status();
-
-		if ((data & mask) == 0) return 0;
-		if (HAL_GetTick() - then >= timeout_ms) return 1;
+	// set font transparency
+	if (enable) {
+		ra8875_update_register_bits(0x22, 0x40, 0x40);
+	} else {
+		ra8875_update_register_bits(0x22, 0x40, 0x00);
 	}
 }
+static void ra8875_set_font_horizontal_enlargement(uint8_t enlargement) {
 
-void ra8875_set_color(uint16_t color) {
+	// check to see if parameter is valid
+	if (enlargement < 1u) {
+		enlargement = 1;
+	} else if (enlargement > 4u) {
+		enlargement = 4;
+	}
 
-	// red, green, and blue (RGB565)
-	ra8875_write(0x63, (color >> 11) & 0x1F);
-	ra8875_write(0x64, (color >> 5) & 0x3F);
-	ra8875_write(0x65, color & 0x1F);
+	// subtract one to get the valid bits [0-3]
+	uint8_t data = (uint8_t)(enlargement - 1u);
+
+	ra8875_update_register_bits(0x22, 0x0Cu, (uint8_t)(data << 2));
+}
+static void ra8875_set_font_vertical_enlargement(uint8_t enlargement) {
+
+	// check to see if parameter is valid
+	if (enlargement < 1u) {
+		enlargement = 1;
+	} else if (enlargement > 4u) {
+		enlargement = 4;
+	}
+
+	// subtract one to get the valid bits [0-3]
+	uint8_t data = (uint8_t)(enlargement - 1u);
+
+	ra8875_update_register_bits(0x22, 0x03, data);
+}
+static void ra8875_set_font_cursor_horizontal_position(uint16_t position) {
+
+	// set font cursor horizontal position
+	ra8875_write_register(0x2A, position & 0xFF);
+	ra8875_write_register(0x2B, (position >> 8) & 0xFF);
+}
+static void ra8875_set_font_cursor_vertical_position(uint16_t position) {
+
+	// set font cursor vertical position
+	ra8875_write_register(0x2C, position & 0xFF);
+	ra8875_write_register(0x2D, (position >> 8) & 0xFF);
 }
 
-void ra8875_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
+static void ra8875_set_color_background(uint16_t color) {
 
-	// start point and end point cannot be equal
-	if (x0 == x1 && y0 == y1) return;
+	// determine if bpp is 8 or 16
+	uint8_t data;
+	ra8875_read_register(0x10, &data);
 
-	// set start point
-	ra8875_write(0x91, x0 & 0xFF);
-	ra8875_write(0x92, (x0 >> 8) & 0xFF);
-	ra8875_write(0x93, y0 & 0xFF);
-	ra8875_write(0x94, (y0 >> 8) & 0xFF);
+	// set background color
+	(data & 0x08) ? ra8875_write_register(0x60, (color >> 11) & 0x1F): ra8875_write_register(0x60, (color >> 5) & 0x07);
+	(data & 0x08) ? ra8875_write_register(0x61, (color >> 05) & 0x3F): ra8875_write_register(0x61, (color >> 2) & 0x07);
+	(data & 0x08) ? ra8875_write_register(0x62, (color >> 00) & 0x1F): ra8875_write_register(0x62, (color >> 0) & 0x03);
+}
+static void ra8875_set_color_foreground(uint16_t color) {
 
-	// set end point
-	ra8875_write(0x95, x1 & 0xFF);
-	ra8875_write(0x96, (x1 >> 8) & 0xFF);
-	ra8875_write(0x97, y1 & 0xFF);
-	ra8875_write(0x98, (y1 >> 8) & 0xFF);
+	// determine if bpp is 8 or 16
+	uint8_t data;
+	ra8875_read_register(0x10, &data);
 
-	// set color (red, green, blue)
-	ra8875_set_color(color);
-
-	// set draw a line and start drawing line
-	uint8_t data = 0x00;
-	data |= 0x00;
-	data |= 0x80;
-	ra8875_write(0x90, data);
-
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+	// set background color
+	(data & 0x08) ? ra8875_write_register(0x63, (color >> 11) & 0x1F): ra8875_write_register(0x63, (color >> 5) & 0x07);
+	(data & 0x08) ? ra8875_write_register(0x64, (color >> 05) & 0x3F): ra8875_write_register(0x64, (color >> 2) & 0x07);
+	(data & 0x08) ? ra8875_write_register(0x65, (color >> 00) & 0x1F): ra8875_write_register(0x65, (color >> 0) & 0x03);
 }
 
+static void ra8875_draw_horizontal_position_start(uint16_t position) {
 
-void ra8875_draw_triangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color, uint8_t fill) {
-
-	// start point, middle point, and end point cannot be equal
-	if ((x0 == x1 && y0 == y1) || (x1 == x2 && y1 == y2) || (x2 == x0 && y2 == y0)) return;
-
-	// set start point
-	ra8875_write(0x91, x0 & 0xFF);
-	ra8875_write(0x92, (x0 >> 8) & 0xFF);
-	ra8875_write(0x93, y0 & 0xFF);
-	ra8875_write(0x94, (y0 >> 8) & 0xFF);
-
-	// set middle point
-	ra8875_write(0x95, x1 & 0xFF);
-	ra8875_write(0x96, (x1 >> 8) & 0xFF);
-	ra8875_write(0x97, y1 & 0xFF);
-	ra8875_write(0x98, (y1 >> 8) & 0xFF);
-
-	// set end point
-	ra8875_write(0xA9, x2 & 0xFF);
-	ra8875_write(0xAA, (x2 >> 8) & 0xFF);
-	ra8875_write(0xAB, y2 & 0xFF);
-	ra8875_write(0xAC, (y2 >> 8) & 0xFF);
-
-	// set color
-	ra8875_set_color(color);
-
-	// set draw a triangle, fill, and start drawing triangle
-	uint8_t data = 0x00;
-
-	if (fill) data |= 0x20;
-	data |= 0x01;
-	data |= 0x80;
-	ra8875_write(0x90, data);
-
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+	// set horizontal position start
+	ra8875_write_register(0x91, position & 0xFF);
+	ra8875_write_register(0x92, (position >> 8) & 0xFF);
 }
+static void ra8875_draw_vertical_position_start(uint16_t position) {
 
-void ra8875_draw_square(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color, uint8_t fill) {
-
-	// start point and end point cannot be equal
-	if (x0 == x1 && y0 == y1) return;
-
-	// set start point
-	ra8875_write(0x91, x0 & 0xFF);
-	ra8875_write(0x92, (x0 >> 8) & 0xFF);
-	ra8875_write(0x93, y0 & 0xFF);
-	ra8875_write(0x94, (y0 >> 8) & 0xFF);
-
-	// set end point
-	ra8875_write(0x95, x1 & 0xFF);
-	ra8875_write(0x96, (x1 >> 8) & 0xFF);
-	ra8875_write(0x97, y1 & 0xFF);
-	ra8875_write(0x98, (y1 >> 8) & 0xFF);
-
-	// set color
-	ra8875_set_color(color);
-
-	// set draw a square, fill, and start drawing square
-	uint8_t data = 0x00;
-
-	if (fill) data |= 0x20;
-	data |= 0x10 | 0x00;
-	data |= 0x80;
-	ra8875_write(0x90, data);
-
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0x90, 0x80, 50)) return; // do something here
+	// set vertical position start
+	ra8875_write_register(0x93, position & 0xFF);
+	ra8875_write_register(0x94, (position >> 8) & 0xFF);
 }
-void ra8875_draw_square_circle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {
+static void ra8875_draw_horizontal_position_stop(uint16_t position) {
 
-	// start point and end point cannot be equal
-	if (x0 == x1 && y0 == y1) return;
-
-	// set start
-	ra8875_write(0x91, x0 & 0xFF);
-	ra8875_write(0x92, (x0 >> 8) & 0xFF);
-	ra8875_write(0x93, y0 & 0xFF);
-	ra8875_write(0x94, (y0 >> 8) & 0xFF);
-
-	// set end
-	ra8875_write(0x95, x1 & 0xFF);
-	ra8875_write(0x96, (x1 >> 8) & 0xFF);
-	ra8875_write(0x97, y1 & 0xFF);
-	ra8875_write(0x98, (y1 >> 8) & 0xFF);
-
-	// set long axis
-	ra8875_write(0xA1, a_l & 0xFF);
-	ra8875_write(0xA2, (a_l >> 8) & 0xFF);
-
-	// set short axis
-	ra8875_write(0xA3, a_s & 0xFF);
-	ra8875_write(0xA4, (a_s >> 8) & 0xFF);
-
-	// set color
-	ra8875_set_color(color);
-
-	// set draw a circle square, fill, and start drawing circle square
-	uint8_t data = 0x00;
-
-	if (fill) data |= 0x40;
-	data |= 0x20;
-	data |= 0x80;
-	ra8875_write(0xA0, data);
-
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0xA0, 0x80, 50)) return; // do something here
+	// set horizontal position stop
+	ra8875_write_register(0x95, position & 0xFF);
+	ra8875_write_register(0x96, (position >> 8) & 0xFF);
 }
+static void ra8875_draw_vertical_position_stop(uint16_t position) {
 
-void ra8875_draw_circle(uint16_t x0, uint16_t y0, uint8_t radius, uint16_t color, uint8_t fill) {
+	// set vertical position stop
+	ra8875_write_register(0x97, position & 0xFF);
+	ra8875_write_register(0x98, (position >> 8) & 0xFF);
+}
+static void ra8875_draw_horizontal_position_middle(uint16_t position) {
 
-	// set center
-	ra8875_write(0x99, x0 & 0xFF);
-	ra8875_write(0x9A, (x0 >> 8) & 0xFF);
-	ra8875_write(0x9B, y0 & 0xFF);
-	ra8875_write(0x9C, (y0 >> 8) & 0xFF);
+	// set horizontal position middle
+	ra8875_write_register(0xA9, position & 0xFF);
+	ra8875_write_register(0xAA, (position >> 8) & 0xFF);
+}
+static void ra8875_draw_vertical_position_middle(uint16_t position) {
+
+	// set vertical position middle
+	ra8875_write_register(0xAB, position & 0xFF);
+	ra8875_write_register(0xAC, (position >> 8) & 0xFF);
+}
+static void ra8875_draw_horizontal_position_center_circle(uint16_t position) {
+
+	// set horizontal position center
+	ra8875_write_register(0x99, position & 0xFF);
+	ra8875_write_register(0x9A, (position >> 8) & 0xFF);
+}
+static void ra8875_draw_vertical_position_center_circle(uint16_t position) {
+
+	// set vertical position center
+	ra8875_write_register(0x9B, position & 0xFF);
+	ra8875_write_register(0x9C, (position >> 8) & 0xFF);
+}
+static void ra8875_draw_radius(uint8_t radius) {
 
 	// set radius
-	ra8875_write(0x9D, radius);
+	ra8875_write_register(0x9D, radius & 0xFF);
+}
+static void ra8875_draw_curve_part_select(uint8_t curve_part_select) {
 
-	// set color
-	ra8875_set_color(color);
+	// set draw curve part select
+	ra8875_update_register_bits(0xA0, 0x03, curve_part_select);
+}
+static void ra8875_draw_axis_long(uint16_t axis) {
 
-	// set fill and start drawing circle
-	uint8_t data = 0x00;
+	// set axis long
+	ra8875_write_register(0xA1, axis & 0xFF);
+	ra8875_write_register(0xA2, (axis >> 8) & 0xFF);
+}
+static void ra8875_draw_axis_short(uint16_t axis) {
 
-	if (fill) data |= 0x20;
-	data |= 0x40;
-	ra8875_write(0x90, data);
+	// set axis short
+	ra8875_write_register(0xA3, axis & 0xFF);
+	ra8875_write_register(0xA4, (axis >> 8) & 0xFF);
+}
+static void ra8875_draw_horizontal_position_center_ellipse(uint16_t position) {
 
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0x90, 0x40, 50)) return; // do something here
+	// set horizontal position center
+	ra8875_write_register(0xA5, position & 0xFF);
+	ra8875_write_register(0xA6, (position >> 8) & 0xFF);
+}
+static void ra8875_draw_vertical_position_center_ellipse(uint16_t position) {
+
+	// set vertical position center
+	ra8875_write_register(0xA7, position & 0xFF);
+	ra8875_write_register(0xA8, (position >> 8) & 0xFF);
 }
 
-void ra8875_draw_ellipse(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill) {
+void ra8875_init(ra8875_t *config) {
 
-	// set center
-	ra8875_write(0xA5, x0 & 0xFF);
-	ra8875_write(0xA6, (x0 >> 8) & 0xFF);
-	ra8875_write(0xA7, y0 & 0xFF);
-	ra8875_write(0xA8, (y0 >> 8) & 0xFF);
+	// set config
+	ra8875_config = *config;
 
-	// set long axis
-	ra8875_write(0xA5, a_l & 0xFF);
-	ra8875_write(0xA5, (a_l >> 8) & 0xFF);
+	// set the ra8875 configuration settings
+	ra8875_reset_software();
+	ra8875_init_phase_locked_loop();
+	ra8875_init_system_configuration();
+	ra8875_init_pixel_clock();
+	ra8875_init_horizontal_settings();
+	ra8875_init_vertical_settings();
+	ra8875_set_active_window(0, 0, 799, 479);
+	ra8875_init_pulse_width_modulation_1();
 
-	// set short axis
-	ra8875_write(0xA5, a_s & 0xFF);
-	ra8875_write(0xA5, (a_s >> 8) & 0xFF);
+	// turn display on
+	ra8875_set_display_power(true);
 
-	// set color
-	ra8875_set_color(color);
-
-	// set draw ellipse, fill, and start drawing ellipse
-	uint8_t data = 0x00;
-
-	if (fill) data |= 0x40;
-	data |= 0x00 | 0x00;
-	data |= 0x80;
-	ra8875_write(0xA0, data);
-
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0xA0, 0x80, 50)) return; // do something here
-}
-void ra8875_draw_ellipse_curve(uint16_t x0, uint16_t y0, uint16_t a_l, uint16_t a_s, uint16_t color, uint8_t fill, uint8_t part) {
-
-	// set center
-	ra8875_write(0xA5, x0 & 0xFF);
-	ra8875_write(0xA6, (x0 >> 8) & 0xFF);
-	ra8875_write(0xA7, y0 & 0xFF);
-	ra8875_write(0xA8, (y0 >> 8) & 0xFF);
-
-	// set long axis
-	ra8875_write(0xA1, a_l & 0xFF);
-	ra8875_write(0xA2, (a_l >> 8) & 0xFF);
-
-	// set short axis
-	ra8875_write(0xA3, a_s & 0xFF);
-	ra8875_write(0xA4, (a_s >> 8) & 0xFF);
-
-	// set color
-	ra8875_set_color(color);
-
-	// set draw curve, draw curve part select (DECP), fill, and start drawing curve
-	uint8_t data = 0x00;
-
-	if (fill) data |= 0x40;
-	data |= 0x00 | 0x10;
-	data |= 0x80;
-	data |= part;
-	ra8875_write(0xA0, data);
-
-	// wait for drawing to finish
-	if (ra8875_wait_while_busy(0xA0, 0x80, 50)) return; // do something here
+	// clear memory
+	ra8875_clear_memory();
 }
 
-void ra8875_write_text(char* s, uint16_t x, uint16_t y, uint8_t size, uint16_t color) {
+void ra8875_set_display_power(bool enable) {
 
-	// break string apart
-	int increment = 0;
-
-	// set font size
-	switch (size) {
-		case 0:
-			ra8875_write(0x22, 0x00);
-			increment = 8;
-			break;
-		case 1:
-			ra8875_write(0x22, 0x05);
-			increment = 16;
-			break;
-		case 2:
-			ra8875_write(0x22, 0x0A);
-			increment = 24;
-			break;
-		case 3:
-			ra8875_write(0x22, 0x0F);
-			increment = 32;
-			break;
-		default:
-			break;
+	// turn power on/off
+	if (enable) {
+		ra8875_update_register_bits(0x01, 0x80, 0x80);
+	} else {
+		ra8875_update_register_bits(0x01, 0x80, 0x00);
 	}
+}
+void ra8875_reset_software(void) {
 
-	// set font color
-	ra8875_set_color(color);
+	// reset software
+	HAL_GPIO_WritePin(ra8875_config.rst_port, ra8875_config.rst_pin, GPIO_PIN_SET);
+	ra8875_delay_ms(10);
+	HAL_GPIO_WritePin(ra8875_config.rst_port, ra8875_config.rst_pin, GPIO_PIN_RESET);
+	ra8875_delay_ms(10);
+	HAL_GPIO_WritePin(ra8875_config.rst_port, ra8875_config.rst_pin, GPIO_PIN_SET);
+	ra8875_delay_ms(10);
+}
 
-	// iterate from the starting x point to the end x point
-	for (int i = 0; s[i] != '\0'; i++) {
+void ra8875_set_active_window(uint16_t x_start, uint16_t y_start, uint16_t x_stop, uint16_t y_stop) {
 
-		// set font cursor horizontal and vertical position
-		ra8875_write(0x2A, x & 0xFF);
-		ra8875_write(0x2B, (x >> 8) & 0xFF);
-		ra8875_write(0x2C, y & 0xFF);
-		ra8875_write(0x2D, (y >> 8) & 0xFF);
+	// set active window
+	ra8875_write_register(0x30, x_start & 0xFF);
+	ra8875_write_register(0x31, (x_start >> 8) & 0xFF);
+	ra8875_write_register(0x32, y_start & 0xFF);
+	ra8875_write_register(0x33, (y_start >> 8) & 0xFF);
+	ra8875_write_register(0x34, x_stop & 0xFF);
+	ra8875_write_register(0x35, (x_stop >> 8) & 0xFF);
+	ra8875_write_register(0x36, y_stop & 0xFF);
+	ra8875_write_register(0x37, (y_stop >> 8) & 0xFF);
+}
 
-		// write text (uint8_t)
-		ra8875_write(0x02, (uint8_t) s[i]);
+void ra8875_set_text_mode(void) {
 
-		// wait until writing is finished
-		ra8875_wait_status_while_busy(0x80, 50);
+	// set text mode
+	ra8875_update_register_bits(0x40, 0x80, 0x80);
+}
+void ra8875_set_graphic_mode(void) {
 
-		// increase starting x point by the increment value (size)
-		x += increment;
+	// set graphic mode
+	ra8875_update_register_bits(0x40, 0x80, 0x00);
+}
+void ra8875_set_memory_write_cursor_auto_increase(bool enable) {
+
+	// set graphic mode
+	if (enable) {
+		ra8875_update_register_bits(0x40, 0x02, 0x02);
+	} else {
+		ra8875_update_register_bits(0x40, 0x02, 0x00);
 	}
+}
+
+void ra8875_clear_memory(void) {
+
+	// clear memory
+	ra8875_update_register_bits(0x8E, 0x80, 0x80);
+
+	// loop to check if memory is still being cleared
+	ra8875_clear_memory_busy_wait();
+}
+
+void ra8875_write_text(char *text, bool font_background_transparency, uint8_t horizontal_enlargement, uint8_t vertical_enlargement, uint16_t horizontal_position, uint16_t vertical_position, uint16_t color_background, uint16_t color_foreground) {
+
+	// needs checks later...
+
+	// reset font settings
+	ra8875_write_register(0x22, 0x00);
+
+	// set font settings
+	ra8875_set_font_background_transparency(font_background_transparency);
+	ra8875_set_font_horizontal_enlargement(horizontal_enlargement);
+	ra8875_set_font_vertical_enlargement(vertical_enlargement);
+	ra8875_set_font_cursor_horizontal_position(horizontal_position);
+	ra8875_set_font_cursor_vertical_position(vertical_position);
+	ra8875_set_color_background(color_background);
+	ra8875_set_color_foreground(color_foreground);
+
+	// check to see if cursor auto increase is on, and if not, we manually increment the text
+	uint8_t auto_increase;
+	ra8875_read_register(0x40, &auto_increase);
+
+	if ((auto_increase & 0x02) == 0u) {
+
+		// iterate through text and display it with the offset provided from horizontal_enlargement
+		for (size_t i = 0; text[i] != '\0'; i++) {
+
+			// set horizontal font cursor position
+			ra8875_set_font_cursor_horizontal_position(horizontal_position);
+
+			// write character to memory
+			ra8875_write_memory_data(text[i]);
+
+			// increase offset
+			horizontal_position += (uint16_t)(horizontal_enlargement * 8u);
+		}
+	} else {
+
+		// iterate through text and display it
+		for (size_t i = 0; text[i] != '\0'; i++) {
+
+			// write character to memory
+			ra8875_write_memory_data(text[i]);
+		}
+
+	}
+}
+
+void ra8875_draw_line(uint16_t x_start, uint16_t y_start, uint16_t x_stop, uint16_t y_stop, uint16_t color) {
+
+	// reset draw controls
+	ra8875_write_register(0x90, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_start(x_start);
+	ra8875_draw_vertical_position_start(y_start);
+	ra8875_draw_horizontal_position_stop(x_stop);
+	ra8875_draw_vertical_position_stop(y_stop);
+	ra8875_set_color_foreground(color);
+
+	// set signal
+	ra8875_update_register_bits(0x90, 0x10, 0x00);
+
+	// draw line
+	ra8875_update_register_bits(0x90, 0x80, 0x80);
+
+	// check if drawing is complete
+	ra8875_draw_shape_busy_wait(0x90, 0x80);
+}
+void ra8875_draw_triangle(uint16_t x_start, uint16_t y_start, uint16_t x_middle, uint16_t y_middle, uint16_t x_stop, uint16_t y_stop, uint16_t color, bool fill) {
+
+	// reset draw controls
+	ra8875_write_register(0x90, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_start(x_start);
+	ra8875_draw_vertical_position_start(y_start);
+	ra8875_draw_horizontal_position_middle(x_middle);
+	ra8875_draw_vertical_position_middle(y_middle);
+	ra8875_draw_horizontal_position_stop(x_stop);
+	ra8875_draw_vertical_position_stop(y_stop);
+	ra8875_set_color_foreground(color);
+
+	// set fill
+	(fill) ? ra8875_update_register_bits(0x90, 0x20, 0x20) : ra8875_update_register_bits(0x90, 0x20, 0x00);
+
+	// set signal
+	ra8875_update_register_bits(0x90, 0x01, 0x01);
+
+	// draw triangle
+	ra8875_update_register_bits(0x90, 0x80, 0x80);
+
+	// check if drawing is complete
+	ra8875_draw_shape_busy_wait(0x90, 0x80);
+}
+void ra8875_draw_rectangle(uint16_t x_start, uint16_t y_start, uint16_t x_stop, uint16_t y_stop, uint16_t color, bool fill) {
+
+	// reset draw controls
+	ra8875_write_register(0x90, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_start(x_start);
+	ra8875_draw_vertical_position_start(y_start);
+	ra8875_draw_horizontal_position_stop(x_stop);
+	ra8875_draw_vertical_position_stop(y_stop);
+	ra8875_set_color_foreground(color);
+
+	// set fill
+	(fill) ? ra8875_update_register_bits(0x90, 0x20, 0x20) : ra8875_update_register_bits(0x90, 0x20, 0x00);
+
+	// set signal
+	ra8875_update_register_bits(0x90, 0x10, 0x10);
+
+	// draw rectangle
+	ra8875_update_register_bits(0x90, 0x80, 0x80);
+
+	// check if drawing is complete
+	ra8875_draw_shape_busy_wait(0x90, 0x80);
+}
+void ra8875_draw_rectangle_circle(uint16_t x_start, uint16_t y_start, uint16_t x_stop, uint16_t y_stop, uint16_t axis_long, uint16_t axis_short, uint16_t color, bool fill) {
+
+	// reset draw controls
+	ra8875_write_register(0xA0, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_start(x_start);
+	ra8875_draw_vertical_position_start(y_start);
+	ra8875_draw_horizontal_position_stop(x_stop);
+	ra8875_draw_vertical_position_stop(y_stop);
+	ra8875_draw_axis_long(axis_long);
+	ra8875_draw_axis_short(axis_short);
+	ra8875_set_color_foreground(color);
+
+	// set fill
+	(fill) ? ra8875_update_register_bits(0xA0, 0x40, 0x40): ra8875_update_register_bits(0xA0, 0x40, 0x00);
+
+	// set signal
+	ra8875_update_register_bits(0xA0, 0x20, 0x20);
+
+	// draw rectangle circle
+	ra8875_update_register_bits(0xA0, 0x80, 0x80);
+
+	// check if drawing is complete
+	ra8875_draw_shape_busy_wait(0xA0, 0x80);
+}
+void ra8875_draw_circle(uint16_t x_center, uint16_t y_center, uint8_t radius, uint16_t color, bool fill) {
+
+	// reset draw controls
+	ra8875_write_register(0x90, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_center_circle(x_center);
+	ra8875_draw_vertical_position_center_circle(y_center);
+	ra8875_draw_radius(radius);
+	ra8875_set_color_foreground(color);
+
+	// set fill
+	(fill) ? ra8875_update_register_bits(0x90, 0x20, 0x20) : ra8875_update_register_bits(0x90, 0x20, 0x00);
+
+	// draw circle
+	ra8875_update_register_bits(0x90, 0x40, 0x40);
+
+	// check if drawing is completed
+	ra8875_draw_shape_busy_wait(0x90, 0x40);
+}
+void ra8875_draw_ellipse(uint16_t x_center, uint16_t y_center, uint16_t axis_long, uint16_t axis_short, uint16_t color, bool fill) {
+
+	// reset draw controls
+	ra8875_write_register(0xA0, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_center_ellipse(x_center);
+	ra8875_draw_vertical_position_center_ellipse(y_center);
+	ra8875_draw_axis_long(axis_long);
+	ra8875_draw_axis_short(axis_short);
+	ra8875_set_color_foreground(color);
+
+	// set fill
+	(fill) ? ra8875_update_register_bits(0xA0, 0x40, 0x40): ra8875_update_register_bits(0xA0, 0x40, 0x00);
+
+	// set signals
+	ra8875_update_register_bits(0xA0, 0x20, 0x00);
+	ra8875_update_register_bits(0xA0, 0x10, 0x00);
+
+	// draw ellipse
+	ra8875_update_register_bits(0xA0, 0x80, 0x80);
+
+	// check if drawing is completed
+	ra8875_draw_shape_busy_wait(0xA0, 0x80);
+}
+void ra8875_draw_ellipse_curve(uint16_t x_center, uint16_t y_center, uint16_t axis_long, uint16_t axis_short, uint16_t color, uint8_t curve_part_select, bool fill) {
+
+	// reset draw controls
+	ra8875_write_register(0xA0, 0x00);
+
+	// set draw settings
+	ra8875_draw_horizontal_position_center_ellipse(x_center);
+	ra8875_draw_vertical_position_center_ellipse(y_center);
+	ra8875_draw_axis_long(axis_long);
+	ra8875_draw_axis_short(axis_short);
+	ra8875_set_color_foreground(color);
+	ra8875_draw_curve_part_select(curve_part_select);
+
+	// set fill
+	(fill) ? ra8875_update_register_bits(0xA0, 0x40, 0x40): ra8875_update_register_bits(0xA0, 0x40, 0x00);
+
+	// set signals
+	ra8875_update_register_bits(0xA0, 0x20, 0x00);
+	ra8875_update_register_bits(0xA0, 0x10, 0x10);
+
+	// draw ellipse curve
+	ra8875_update_register_bits(0xA0, 0x80, 0x80);
+
+	// check if drawing is completed
+	ra8875_draw_shape_busy_wait(0xA0, 0x80);
 }
