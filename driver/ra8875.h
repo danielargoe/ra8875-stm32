@@ -58,7 +58,7 @@ void ra8875_set_memory_write_cursor_auto_increase(bool enable);
 
 void ra8875_clear_memory(void);
 
-void ra8875_write_text(char *text, bool font_background_transparency, uint8_t horizontal_enlargement, uint8_t vertical_enlargement, uint16_t horizontal_position, uint16_t vertical_position, uint16_t color_background, uint16_t color_foreground);
+void ra8875_write_text(char *text, uint16_t horizontal_position, uint16_t vertical_position, uint8_t horizontal_enlargement, uint8_t vertical_enlargement, uint16_t color_background, uint16_t color_foreground, bool background_transparency);
 
 void ra8875_draw_line(uint16_t x_start, uint16_t y_start, uint16_t x_stop, uint16_t y_stop, uint16_t color);
 void ra8875_draw_triangle(uint16_t x_start, uint16_t y_start, uint16_t x_middle, uint16_t y_middle, uint16_t x_stop, uint16_t y_stop, uint16_t color, bool fill);

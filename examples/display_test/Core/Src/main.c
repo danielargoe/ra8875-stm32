@@ -162,8 +162,8 @@ int main(void)
   ra8875_set_memory_write_cursor_auto_increase(false);
 
   ra8875_set_text_mode();
-//  ra8875_write_text("DANIEL", false, 4, 4, 0, 0, 0xFFFF, 0x0000);
-//  ra8875_write_text("DANIEL", true, 3, 1, 0, 200, 0xFFFF, 0xFFFF);
+  ra8875_write_text("DANIEL", 0, 0, 1, 1, 0xFFFF, 0x0000, false);
+  ra8875_write_text("DANIEL", 0, 200, 4, 4, 0xFFFF, 0xFFFF, true);
 
   // basic testing
   ra8875_set_graphic_mode();
