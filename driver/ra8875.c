@@ -11,26 +11,21 @@
 
 static ra8875_t ra8875_config;
 
-// done
 static void ra8875_delay_ms(uint32_t delay);
 static void ra8875_write_scs_low(void);
 static void ra8875_write_scs_high(void);
 
-// done
 static void ra8875_write_data(uint8_t data);
 static void ra8875_read_data(uint8_t *data);
 static void ra8875_write_command(uint8_t reg);
 static void ra8875_read_status(uint8_t *status);
 
-// done
 static void ra8875_write_register(uint8_t reg, uint8_t data);
 static void ra8875_read_register(uint8_t reg, uint8_t *data);
 static void ra8875_read_status_register(uint8_t *data);
 
-// done
 static void ra8875_update_register_bits(uint8_t reg, uint8_t mask, uint8_t data);
 
-// done
 static void ra8875_init_phase_locked_loop(void);
 static void ra8875_init_system_configuration(void);
 static void ra8875_init_pixel_clock(void);
@@ -38,7 +33,6 @@ static void ra8875_init_horizontal_settings(void);
 static void ra8875_init_vertical_settings(void);
 static void ra8875_init_pulse_width_modulation_1(void);
 
-// current
 static void ra8875_write_memory_data(uint8_t data);
 //static void ra8875_read_memory_data(uint8_t *data);
 
@@ -46,14 +40,12 @@ static void ra8875_write_text_busy_wait(void);
 static void ra8875_clear_memory_busy_wait(void);
 static void ra8875_draw_shape_busy_wait(uint8_t reg, uint8_t mask);
 
-// done
 static void ra8875_set_font_background_transparency(bool enable);
 static void ra8875_set_font_horizontal_enlargement(uint8_t enlargement);
 static void ra8875_set_font_vertical_enlargement(uint8_t enlargement);
 static void ra8875_set_font_cursor_horizontal_position(uint16_t position);
 static void ra8875_set_font_cursor_vertical_position(uint16_t position);
 
-// done
 static void ra8875_set_color_background(uint16_t color);
 static void ra8875_set_color_foreground(uint16_t color);
 
@@ -71,8 +63,6 @@ static void ra8875_draw_curve_part_select(uint8_t curve_part_select);
 static void ra8875_draw_axis_long(uint16_t axis);
 static void ra8875_draw_axis_short(uint16_t axis);
 
-
-/** ---------- **/
 
 static void ra8875_delay_ms(uint32_t delay) {
 
@@ -498,7 +488,7 @@ void ra8875_clear_memory(void) {
 	ra8875_clear_memory_busy_wait();
 }
 
-void ra8875_write_text(char *text, bool font_background_transparency, uint8_t horizontal_enlargement, uint8_t vertical_enlargement, uint16_t horizontal_position, uint16_t vertical_position, uint16_t color_background, uint16_t color_foreground) {
+void ra8875_write_text(char *text, uint16_t horizontal_position, uint16_t vertical_position, uint8_t horizontal_enlargement, uint8_t vertical_enlargement, uint16_t color_background, uint16_t color_foreground, bool background_transparency) {
 
 	// needs checks later...
 
@@ -506,13 +496,13 @@ void ra8875_write_text(char *text, bool font_background_transparency, uint8_t ho
 	ra8875_write_register(0x22, 0x00);
 
 	// set font settings
-	ra8875_set_font_background_transparency(font_background_transparency);
-	ra8875_set_font_horizontal_enlargement(horizontal_enlargement);
-	ra8875_set_font_vertical_enlargement(vertical_enlargement);
 	ra8875_set_font_cursor_horizontal_position(horizontal_position);
 	ra8875_set_font_cursor_vertical_position(vertical_position);
+	ra8875_set_font_horizontal_enlargement(horizontal_enlargement);
+	ra8875_set_font_vertical_enlargement(vertical_enlargement);
 	ra8875_set_color_background(color_background);
 	ra8875_set_color_foreground(color_foreground);
+	ra8875_set_font_background_transparency(background_transparency);
 
 	// check to see if cursor auto increase is on, and if not, we manually increment the text
 	uint8_t auto_increase;
