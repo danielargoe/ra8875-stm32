@@ -126,30 +126,69 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
-  ra8875_initialize();
+  ra8875_t ra8875_config;
+  ra8875_config.hspi = &hspi1;
+  ra8875_config.scs_port = GPIOD;
+  ra8875_config.scs_pin = GPIO_PIN_14;
+  ra8875_config.rst_port = GPIOD;
+  ra8875_config.rst_pin = GPIO_PIN_15;
+
+  ra8875_config.pllc1 = 0x0B;
+  ra8875_config.pllc2 = 0x02;
+
+  ra8875_config.sysr = 0x08;
+
+  ra8875_config.pcsr = 0x81;
+
+  ra8875_config.hdwr = 0x63;
+  ra8875_config.hndftr = 0x00;
+  ra8875_config.hndr = 0x03;
+  ra8875_config.hstr = 0x01;
+  ra8875_config.hpwr = 0x03;
+
+  ra8875_config.vdhr0 = 0xDF;
+  ra8875_config.vdhr1 = 0x01;
+  ra8875_config.vndr0 = 0x0F;
+  ra8875_config.vndr1 = 0x00;
+  ra8875_config.vstr0 = 0x0E;
+  ra8875_config.vstr1 = 0x00;
+  ra8875_config.vpwr = 0x01;
+
+  ra8875_config.p1cr = 0x8F;
+  ra8875_config.p1dcr = 0xFF;
+
+  ra8875_init(&ra8875_config);
+
+  ra8875_set_memory_write_cursor_auto_increase(false);
+
+  ra8875_set_text_mode();
+//  ra8875_write_text("DANIEL", false, 4, 4, 0, 0, 0xFFFF, 0x0000);
+//  ra8875_write_text("DANIEL", true, 3, 1, 0, 200, 0xFFFF, 0xFFFF);
 
   // basic testing
+  ra8875_set_graphic_mode();
+
   ra8875_draw_line(20, 20, 200, 120, 0xFFFF);
 
-  ra8875_draw_triangle(240, 120, 320, 40, 400, 120, 0xF800, 0);
-  ra8875_draw_triangle(240, 220, 320, 140, 400, 220, 0x07E0, 1);
+  ra8875_draw_triangle(240, 120, 320, 40, 400, 120, 0xF800, false);
+  ra8875_draw_triangle(240, 220, 320, 140, 400, 220, 0x07E0, true);
 
-  ra8875_draw_square(450, 40, 580, 120, 0x001F, 0);
-  ra8875_draw_square(620, 40, 760, 120, 0xFFE0, 1);
+  ra8875_draw_rectangle(450, 40, 580, 120, 0x001F, false);
+  ra8875_draw_rectangle(620, 40, 760, 120, 0xFFE0, true);
 
-  ra8875_draw_square_circle(450, 150, 580, 240, 20, 20, 0xF81F, 0);
-  ra8875_draw_square_circle(620, 150, 760, 240, 20, 20, 0x07FF, 1);
+  ra8875_draw_rectangle_circle(450, 150, 580, 240, 20, 20, 0xF81F, false);
+  ra8875_draw_rectangle_circle(620, 150, 760, 240, 20, 20, 0x07FF, true);
 
-  ra8875_draw_circle(90, 330, 40, 0xFFFF, 0);
-  ra8875_draw_circle(210, 330, 40, 0xFD20, 1);
+  ra8875_draw_circle(90, 330, 40, 0xFFFF, false);
+  ra8875_draw_circle(210, 330, 40, 0xFD20, true);
 
-  ra8875_draw_ellipse(430, 340, 70, 35, 0xAFE5, 0);
-  ra8875_draw_ellipse(650, 340, 70, 35, 0x780F, 1);
+  ra8875_draw_ellipse(430, 340, 70, 35, 0xAFE5, false);
+  ra8875_draw_ellipse(650, 340, 70, 35, 0x780F, true);
 
-  ra8875_draw_ellipse_curve(330, 360, 45, 25, 0xF800, 0, 0);
-  ra8875_draw_ellipse_curve(390, 360, 45, 25, 0x07E0, 1, 1);
-  ra8875_draw_ellipse_curve(330, 430, 45, 25, 0x001F, 0, 2);
-  ra8875_draw_ellipse_curve(390, 430, 45, 25, 0xFFE0, 1, 3);
+  ra8875_draw_ellipse_curve(330, 360, 45, 25, 0xF800, 0x00, false);
+  ra8875_draw_ellipse_curve(390, 360, 45, 25, 0x07E0, 0x01, true);
+  ra8875_draw_ellipse_curve(330, 430, 45, 25, 0x001F, 0x02, false);
+  ra8875_draw_ellipse_curve(390, 430, 45, 25, 0xFFE0, 0x03, true);
   /* USER CODE END 2 */
 
   /* Infinite loop */
